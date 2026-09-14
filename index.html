@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VideoTube</title>
+    
+    <!-- CSS3 EMBUTIDO DIRETO NO HTML -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background-color: #0f0f0f; /* Fundo escuro estilo YouTube */
+            color: #ffffff;
+        }
+
+        /* BARRA SUPERIOR */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #212121;
+            padding: 10px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            height: 40px; /* Mantém a proporção da sua logo */
+            object-fit: contain;
+        }
+
+        .btn-upload {
+            background-color: #cc0000; /* Vermelho YouTube */
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        .btn-upload:hover {
+            background-color: #990000;
+        }
+
+        /* FEED PRINCIPAL */
+        .container {
+            padding: 30px;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        /* GRID DE VÍDEOS (RESPONSIVO) */
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .video-card {
+            background-color: #1f1f1f;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+
+        .video-card video {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background-color: #000;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- BARRA SUPERIOR COM A SUA LOGO -->
+    <header class="navbar">
+        <img src="logo.png" alt="VideoTube Logo" class="logo">
+        <div class="upload-section">
+            <input type="file" id="videoInput" accept="video/*" style="display: none;">
+            <label for="videoInput" class="btn-upload">Enviar Vídeo</label>
+        </div>
+    </header>
+
+    <!-- TELA INICIAL (FEED DE VÍDEOS) -->
+    <main class="container">
+        <h2>Vídeos Recentes</h2>
+        <div id="feedVideos" class="video-grid">
+            <!-- Os vídeos enviados vão aparecer aqui automaticamente -->
+        </div>
+    </main>
+
+    <!-- LOGICA DO FIREBASE (V10 VIA CDN) -->
+    <script type="module">
+        import { initializeApp } from "https://gstatic.com";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://gstatic.com";
+        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://gstatic.com";
+
+        // CONFIGURAÇÃO DO SEU PROJETO FIREBASE (Substitua pelos seus dados)
+        const firebaseConfig = {
+            apiKey: "SUA_API_KEY",
+            authDomain: "SEU_AUTH_DOMAIN",
+            projectId: "SEU_PROJECT_ID",
+            storageBucket: "SEU_STORAGE_BUCKET",
+            messagingSenderId: "SEU_SENDER_ID",
+            appId: "SEU_APP_ID"
+        };
+
+        // Inicializando os módulos
+        const app = initializeApp(firebaseConfig);
+        const storage = getStorage(app);
+        const db = getFirestore(app);
+
+        // EVENTO DE UPLOAD DO VÍDEO
+        const videoInput = document.getElementById('videoInput');
+        videoInput.addEventListener('change', async (e) => {
+            const arquivo = e.target.files[0];
+            if (!arquivo) return;
+
+            alert("Iniciando o upload do vídeo no servidor...");
+
+            try {
+                // 1. Envia o arquivo para o Firebase Storage
+                const storageRef = ref(storage, `videos/${Date.now()}_${arquivo.name}`);
+                const uploadResult = await uploadBytes(storageRef, arquivo);
+                
+                // 2. Resgata a URL pública do vídeo
+                const urlVideo = await getDownloadURL(uploadResult.ref);
+                
+                // 3. Adiciona o documento correspondente no Firestore
+                await addDoc(collection(db, "videos_feed"), {
+                    url: urlVideo,
+                    criadoEm: serverTimestamp()
+                });
+
+                alert("Sucesso! O vídeo já está na Tela Inicial.");
+            } catch (erro) {
+                console.error(erro);
+                alert("Erro ao enviar. Verifique o console e as regras do Firebase.");
+            }
+        });
+
+        // ESCUTADOR EM TEMPO REAL PARA MONTAR A TELA INICIAL
+        const feedContainer = document.getElementById("feedVideos");
+        const q = query(collection(db, "videos_feed"), orderBy("criadoEm", "desc"));
+
+        onSnapshot(q, (snapshot) => {
+            feedContainer.innerHTML = ""; // Reseta o feed para atualizar dinamicamente
+            
+            if (snapshot.empty) {
+                feedContainer.innerHTML = "<p>Nenhum vídeo publicado ainda.</p>";
+                return;
+            }
+
+            snapshot.forEach((doc) => {
+                const dados = doc.data();
+                
+                // Monta o player HTML5 na grid
+                const videoCard = document.createElement('div');
+                videoCard.className = 'video-card';
+                videoCard.innerHTML = `
+                    <video src="${dados.url}" controls></video>
+                `;
+                feedContainer.appendChild(videoCard);
+            });
+        });
+    </script>
+</body>
+</html>
